@@ -1,58 +1,67 @@
 use std::{
+    fmt::Display,
     fs::File,
     io::{BufRead, BufReader},
-    time::Instant, fmt::Display,
+    time::Instant,
 };
 
 const MAP_WIDTH: usize = 100;
 const MAP_HEIGHT: usize = 100;
 const MAX_HEIGHT: u8 = 9;
 
+/// Represents a position within a height map.
+#[derive(Clone, Copy)]
+pub struct Vector2(usize, usize);
+
+/// Represents a height map in the form of u8 elements.
 pub struct HeightMap {
     grid: [u8; MAP_WIDTH * MAP_HEIGHT],
 }
 
-#[derive(Debug)]
+/// Provides heights for neighbouring cells.
 pub struct Neighbours {
     pub top: u8,
     pub right: u8,
     pub bottom: u8,
-    pub left: u8
+    pub left: u8,
 }
 
 /// Represents the input for the puzzle.
 pub struct Input {
-    map: HeightMap
+    map: HeightMap,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct Vector2(usize, usize);
-
 impl Vector2 {
+    /// Translates the index into a position on a height map.
     pub fn from_index(index: usize) -> Self {
         Self(index % MAP_WIDTH, index / MAP_WIDTH)
     }
 
+    /// Translates the position into an index within the raw grid of a height map.
     pub fn to_index(&self) -> usize {
         self.1 * MAP_WIDTH + self.0
     }
 }
 
 impl HeightMap {
+    /// Creates a new height map, that is initialized with the max height on every cell.
     pub fn new() -> Self {
         Self {
-            grid: [MAX_HEIGHT; MAP_WIDTH * MAP_HEIGHT]
+            grid: [MAX_HEIGHT; MAP_WIDTH * MAP_HEIGHT],
         }
     }
 
+    /// Gets the height at the provided position.
     pub fn get(&self, location: Vector2) -> u8 {
         self.grid[location.to_index()]
     }
 
+    /// Updates the height at the provided position.
     pub fn set(&mut self, location: Vector2, height: u8) {
         self.grid[location.to_index()] = height;
     }
 
+    /// Gets the heights of all neighbours of the provided location.
     pub fn get_neighbours(&self, location: Vector2) -> Neighbours {
         let top = if location.1 > 0 {
             self.get(Vector2(location.0, location.1 - 1))
@@ -82,36 +91,52 @@ impl HeightMap {
             top,
             right,
             bottom,
-            left
+            left,
         }
     }
 
+    /// Determines whether the provided location is a low point.
     pub fn is_low_point(&self, location: Vector2) -> bool {
         let height = self.get(location);
+        if height == MAX_HEIGHT {
+            return false;
+        }
+
         let neighbours = self.get_neighbours(location);
-        height < neighbours.top 
-            && height < neighbours.right 
-            && height < neighbours.bottom 
+        height < neighbours.top
+            && height < neighbours.right
+            && height < neighbours.bottom
             && height < neighbours.left
     }
 
+    /// Computes the risk level for the provided risk level.
     pub fn get_risk_level(&self, location: Vector2) -> usize {
         (self.get(location) + 1) as usize
     }
 
-    pub fn get_basin_size(&self, location: Vector2, agenda: &mut Vec<Vector2>) -> Option<usize> {
-        if !self.is_low_point(location) {
+    /// Computes the size of the basin, starting at the provided location.
+    /// This location does NOT have to be a low point. It returns [`None`] if the
+    /// cell was already visited or if the cell has the value [`MAX_HEIGHT`].
+    pub fn get_basin_size(
+        &self,
+        location: Vector2,
+        visited: &mut [bool],
+        agenda: &mut Vec<Vector2>,
+    ) -> Option<usize> {
+
+        // Short circuit if possible.
+        if visited[location.to_index()] || self.get(location) == MAX_HEIGHT {
             return None;
         }
 
         let mut size = 0;
 
-        let mut visited = [false; MAP_WIDTH * MAP_HEIGHT];
+        // Perform DFS.
         agenda.push(location);
-
         while !agenda.is_empty() {
             let location = agenda.pop().unwrap();
             let index = location.to_index();
+
             if visited[index] {
                 continue;
             }
@@ -119,18 +144,17 @@ impl HeightMap {
             visited[index] = true;
             size += 1;
 
-            let height = self.get(location);
             let neighbours = self.get_neighbours(location);
-            if neighbours.left != MAX_HEIGHT && neighbours.left > height {
+            if neighbours.left != MAX_HEIGHT {
                 agenda.push(Vector2(location.0 - 1, location.1))
             }
-            if neighbours.right != MAX_HEIGHT && neighbours.right > height {
+            if neighbours.right != MAX_HEIGHT {
                 agenda.push(Vector2(location.0 + 1, location.1))
             }
-            if neighbours.top != MAX_HEIGHT && neighbours.top > height {
+            if neighbours.top != MAX_HEIGHT {
                 agenda.push(Vector2(location.0, location.1 - 1))
             }
-            if neighbours.bottom != MAX_HEIGHT && neighbours.bottom > height {
+            if neighbours.bottom != MAX_HEIGHT {
                 agenda.push(Vector2(location.0, location.1 + 1))
             }
         }
@@ -159,8 +183,7 @@ pub fn parse_input(file: &str) -> std::io::Result<Input> {
     let mut map = HeightMap::new();
 
     lines.enumerate().for_each(|(y, line)| {
-        line
-            .expect("Expected height map line")
+        line.expect("Expected height map line")
             .as_bytes()
             .iter()
             .map(|&b| b - 0x30)
@@ -172,34 +195,44 @@ pub fn parse_input(file: &str) -> std::io::Result<Input> {
 }
 
 pub fn part1(input: &Input) -> usize {
-    (0..MAP_HEIGHT)
-        .map(|y|
-            (0..MAP_WIDTH)
-                .filter_map(|x| {
-                    let pos = Vector2(x, y);
-                    if input.map.is_low_point(pos) {
-                        Some(input.map.get_risk_level(pos))
-                    } else {
-                        None
-                    }
-                })
-                .sum::<usize>()
-        )
-        .sum()
+    (0..MAP_HEIGHT).map(|y| {
+        (0..MAP_WIDTH)
+            .filter_map(|x| {
+                let pos = Vector2(x, y);
+                if input.map.is_low_point(pos) {
+                    Some(input.map.get_risk_level(pos))
+                } else {
+                    None
+                }
+            })
+            .sum::<usize>()
+    })
+    .sum()
 }
 
 pub fn part2(input: &Input) -> usize {
+    let mut visited = [false; MAP_WIDTH * MAP_HEIGHT];
     let mut agenda = Vec::with_capacity(MAP_WIDTH * MAP_HEIGHT);
+    let mut top = [0usize; 3];
 
-    let mut sizes: Vec<usize> = (0..MAP_WIDTH * MAP_HEIGHT)
-        .filter_map(|i| 
-            input.map.get_basin_size(Vector2::from_index(i), &mut agenda)
+    (0..MAP_WIDTH * MAP_HEIGHT)
+        .filter_map(|i|
+            input.map.get_basin_size(Vector2::from_index(i), &mut visited, &mut agenda)
         )
-        .collect();
+        .for_each(|size| {
+            if size >= top[0] {
+                top[2] = top[1];
+                top[1] = top[0];
+                top[0] = size;
+            } else if size >= top[1] {
+                top[2] = top[1];
+                top[1] = size;
+            } else if size > top[2] {
+                top[2] = size;
+            }
+        });
 
-    sizes.sort_by(|a, b| b.cmp(a));
-    
-    sizes[0] * sizes[1] * sizes[2]
+    top.iter().product()
 }
 
 fn main() -> std::io::Result<()> {
@@ -207,7 +240,6 @@ fn main() -> std::io::Result<()> {
     let input = parse_input("input.txt")?;
     let time_parse = now.elapsed();
     println!("Parse: (time: {}us)", time_parse.as_micros());
-
 
     let now = Instant::now();
     let result1 = part1(&input);
@@ -221,4 +253,3 @@ fn main() -> std::io::Result<()> {
 
     Ok(())
 }
-
