@@ -1,7 +1,8 @@
 use std::{
+    fmt::Display,
     fs::File,
     io::{BufRead, BufReader},
-    time::Instant, fmt::Display,
+    time::Instant,
 };
 
 const MAP_WIDTH: usize = 10;
@@ -24,16 +25,16 @@ impl Vector2 {
 
 #[derive(Clone)]
 pub struct EnergyMap {
-    grid: [u8; MAP_WIDTH * MAP_HEIGHT]
+    grid: [u8; MAP_WIDTH * MAP_HEIGHT],
 }
 
 impl EnergyMap {
     fn new() -> Self {
         Self {
-            grid: [0u8; MAP_WIDTH * MAP_HEIGHT]
+            grid: [0u8; MAP_WIDTH * MAP_HEIGHT],
         }
     }
-    
+
     pub fn get(&self, location: Vector2) -> u8 {
         self.grid[location.to_index()]
     }
@@ -46,7 +47,7 @@ impl EnergyMap {
         let mut agenda = Vec::with_capacity(MAP_WIDTH * MAP_HEIGHT);
         self.step_reuse_stack(&mut agenda)
     }
-    
+
     pub fn step_reuse_stack(&mut self, agenda: &mut Vec<Vector2>) -> usize {
         // Step 1: Increase all energy levels.
         for i in 0..self.grid.len() {
@@ -62,7 +63,6 @@ impl EnergyMap {
 
         // Step 2: Flash and ripple through DFS.
         while !agenda.is_empty() {
-
             // Get current position to process.
             let pos = agenda.pop().unwrap();
 
@@ -91,7 +91,7 @@ impl EnergyMap {
                     if pos_x < 0 || pos_x >= MAP_HEIGHT as isize || (dy == 0 && dx == 0) {
                         continue;
                     }
-                    
+
                     // Schedule if the neighbour level isn't reset before.
                     let new_pos = Vector2(pos_x, pos_y);
                     let level = self.get(new_pos);
@@ -123,7 +123,7 @@ impl Display for EnergyMap {
 }
 
 pub struct Input {
-    map: EnergyMap
+    map: EnergyMap,
 }
 
 pub fn parse_input(file: &str) -> std::io::Result<Input> {
@@ -132,14 +132,13 @@ pub fn parse_input(file: &str) -> std::io::Result<Input> {
     BufReader::new(file)
         .lines()
         .enumerate()
-        .for_each(|(y, line)| 
-            line
-                .expect("Expected a line")
+        .for_each(|(y, line)| {
+            line.expect("Expected a line")
                 .as_bytes()
                 .iter()
                 .enumerate()
                 .for_each(|(x, &b)| map.set(Vector2(x as isize, y as isize), b - 0x30))
-        );
+        });
 
     Ok(Input { map })
 }
@@ -147,7 +146,7 @@ pub fn parse_input(file: &str) -> std::io::Result<Input> {
 pub fn part1(input: &Input) -> usize {
     let mut agenda = Vec::with_capacity(MAP_WIDTH * MAP_HEIGHT);
     let mut map = input.map.clone();
-    
+
     (0..100).map(|_| map.step_reuse_stack(&mut agenda)).sum()
 }
 
@@ -155,13 +154,10 @@ pub fn part2(input: &Input) -> usize {
     let mut agenda = Vec::with_capacity(MAP_WIDTH * MAP_HEIGHT);
     let mut map = input.map.clone();
 
-    (0..).find_map(|i| {
-        if map.step_reuse_stack(&mut agenda) == MAP_WIDTH * MAP_HEIGHT {
-            Some(i + 1)
-        } else {
-            None
-        }
-    }).unwrap()
+    (0..)
+        .position(|_| map.step_reuse_stack(&mut agenda) == MAP_WIDTH * MAP_HEIGHT)
+        .unwrap()
+        + 1
 }
 
 fn main() -> std::io::Result<()> {
