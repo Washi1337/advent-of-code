@@ -170,10 +170,10 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-// Parse: (time: 9us)
-// Solution 1: 2768 (time: 24us)
-// Solution 2: 2914365137499 (time: 78us)
+// Parse: (time: 86us)
+// Solution 1: 2768 (time: 13us)
+// Solution 2: 2914365137499 (time: 12us)
 //
 // Benchmarked:
-// part 1 (real)           time:   [46.454 us 46.526 us 46.602 us]
-// part 2 (real)           time:   [3.6818 us 3.6940 us 3.7082 us]
+// part 1 (real)           time:   [3.2131 us 3.2225 us 3.2332 us]
+// part 2 (real)           time:   [10.908 us 10.937 us 10.969 us]
