@@ -10,9 +10,9 @@ pub struct Input {
 }
 
 /// A structure that reads individual bits from a byte stream.
-pub struct BitReader {
+pub struct BitReader<'a> {
     /// The raw data.
-    pub data: Vec<u8>,
+    pub data: &'a [u8],
 
     /// The current bit index.
     pub position: usize,
@@ -57,31 +57,42 @@ pub fn parse_input(file: &str) -> std::io::Result<Input> {
     Ok(Input { data })
 }
 
-impl BitReader {
+impl<'a> BitReader<'a> {
     /// Creates a new bit reader at the start of the provided data buffer.
-    pub fn new(data: Vec<u8>) -> Self {
+    pub fn new(data: &'a [u8]) -> Self {
         Self { data, position: 0 }
     }
 
     /// Consumes the specified amount of bits from the input stream.
-    pub fn read_bits(&mut self, count: usize) -> Result<u16> {
+    pub fn read_bits(&mut self, mut count: usize) -> Result<u16> {
         if count > 16 {
             return Err(Error::InvalidBitCount(count));
-        } else if self.position + count >= 8 * self.data.len() {
+        } else if self.position + count > 8 * self.data.len() {
             return Err(Error::Eof);
         }
 
         let mut result = 0u16;
 
-        for _ in 0..count {
+        while count > 0 {
+            // Calculate where we are in the buffer.
             let byte_index = self.position / 8;
             let bit_index = self.position % 8;
 
-            let bit = (self.data[byte_index] >> (7 - bit_index)) & 1;
-            result <<= 1;
-            result |= bit as u16;
+            // Determine how we should read the bits from the current byte.
+            let chunk_width = std::cmp::min(8 - bit_index, count);
+            let chunk_mask = ((1usize << chunk_width) - 1) as u8;
+            let shift_count = 8 - bit_index - chunk_width;
 
-            self.position += 1;
+            // Read the bits.
+            let bits = (self.data[byte_index] >> shift_count) & chunk_mask;
+
+            // Append to result.
+            result <<= chunk_width;
+            result |= bits as u16;
+
+            // Advance.
+            self.position += chunk_width;
+            count -= chunk_width;
         }
 
         Ok(result)
@@ -114,7 +125,7 @@ pub const TYPE_ID_LT: u16 = 6;
 pub const TYPE_ID_EQ: u16 = 7;
 
 pub const LENGTH_TYPE_ID_BIT_COUNT: u16 = 0;
-pub const LENGTH_TYPE_ID_PACKET_COUNT: u16 = 0;
+pub const LENGTH_TYPE_ID_PACKET_COUNT: u16 = 1;
 
 pub fn part1(input: &Input) -> Result<usize> {
     fn read_packet(mut reader: &mut BitReader) -> Result<usize> {
@@ -147,12 +158,12 @@ pub fn part1(input: &Input) -> Result<usize> {
         }
     }
 
-    let mut reader = BitReader::new(input.data.clone());
+    let mut reader = BitReader::new(input.data.as_slice());
     read_packet(&mut reader)
 }
 
 pub fn part2(input: &Input) -> Result<usize> {
-    fn evalulate(mut reader: &mut BitReader, mut eval_stack: &mut Vec<usize>) -> Result<usize> {
+    fn evaluate(mut reader: &mut BitReader, mut eval_stack: &mut Vec<usize>) -> Result<usize> {
         let _version = reader.read_bits(3)? as usize;
         let type_id = reader.read_bits(3)?;
 
@@ -170,7 +181,7 @@ pub fn part2(input: &Input) -> Result<usize> {
 
                 while reader.position < end_index {
                     // Recursively evaluate child packet.
-                    let result = evalulate(&mut reader, &mut eval_stack)?;
+                    let result = evaluate(&mut reader, &mut eval_stack)?;
                     eval_stack.push(result);
                     operand_count += 1;
                 }
@@ -179,7 +190,7 @@ pub fn part2(input: &Input) -> Result<usize> {
 
                 for _ in 0..operand_count {
                     // Recursively evaluate child packet.
-                    let result = evalulate(&mut reader, &mut eval_stack)?;
+                    let result = evaluate(&mut reader, &mut eval_stack)?;
                     eval_stack.push(result);
                 }
             }
@@ -207,9 +218,9 @@ pub fn part2(input: &Input) -> Result<usize> {
         }
     }
 
-    let mut reader = BitReader::new(input.data.clone());
-    let mut eval_stack = Vec::new();
-    evalulate(&mut reader, &mut eval_stack)
+    let mut reader = BitReader::new(input.data.as_slice());
+    let mut eval_stack = Vec::with_capacity(128);
+    evaluate(&mut reader, &mut eval_stack)
 }
 
 fn main() -> std::io::Result<()> {
@@ -231,9 +242,9 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-// Parse: (time: 107us)
-// Solution 1: 897 (time: 17us)
-// Solution 2: 9485076995911 (time: 14us)
+// Parse: (time: 80us)
+// Solution 1: 897 (time: 10us)
+// Solution 2: 9485076995911 (time: 11us)
 
-// part 1 (real)           time:   [5.2510 us 5.2732 us 5.3061 us]
-// part 2 (real)           time:   [5.6491 us 5.6632 us 5.6863 us]
+// part 1 (real)           time:   [4.4253 us 4.4294 us 4.4338 us]
+// part 2 (real)           time:   [4.6803 us 4.6849 us 4.6900 us]
